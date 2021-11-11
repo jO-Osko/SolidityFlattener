@@ -1,0 +1,32 @@
+{
+  "name": "jooskos_flattener",
+  "version": "0.0.3",
+  "description": "j00sko's flattener for solidity contracts.",
+  "main": "jooskos_flattener.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jO-Osko/SolidityFlattener"
+  },
+  "keywords": [
+    "smart contracts",
+    "defi",
+    "solidity",
+    "flattener"
+  ],
+  "author": "j00sko",
+  "license": "MIT",
+  "directories": {},
+  "files": [
+    "package.json",
+    "README.md",
+    "jooskos_flattener.js"
+  ],
+  "scripts": {},
+  "bin": {
+    "jooskos_flattener": "jooskos_flattener.js"
+  },
+  "dependencies": {
+    "xmlhttprequest": "^1.8.0"
+  },
+  "devDependencies": {}
+}

@@ -1,0 +1,17 @@
+_build
+
+# Backup files
+*~
+
+# Silly Mac OS X files
+.DS_Store
+
+# VSCode
+.vscode
+.devcontainer
+
+# Dune takes care of merlin
+.merlin
+
+# Node
+node_modules
