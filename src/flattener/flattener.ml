@@ -218,16 +218,19 @@ let build_graph
         |> List.map contract_converter
       in
       List.fold_right
-        (fun contract graph ->
+        (fun parent_contract graph ->
           let out_file : filename =
-            ContractMap.find contract contract_to_file_map
+            ContractMap.find parent_contract contract_to_file_map
           in
-          (* Graph is reversed *)
-          FileMap.update out_file
-            (function
-              | Some x -> Some (FilenameSet.add in_file x)
-              | None -> Some (FilenameSet.singleton in_file))
-            graph)
+          (* If the parent is in the same file, we don't include it *)
+          if out_file = in_file then graph
+          else
+            (* Graph is reversed *)
+            FileMap.update out_file
+              (function
+                | Some x -> Some (FilenameSet.add in_file x)
+                | None -> Some (FilenameSet.singleton in_file))
+              graph)
         (* FileMap.update in_file
            (function
              | Some x -> Some (FilenameSet.add out_file x)
