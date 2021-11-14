@@ -1,0 +1,10 @@
+(executable
+ (name js_flattener)
+ (modes js)
+ (libraries flattener)
+ (preprocess
+  (pps js_of_ocaml-ppx))
+ (promote
+  (until-clean)
+  (into ../../)
+  (only js_flattener.bc.js)))

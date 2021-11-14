@@ -1,10 +1,4 @@
-(executable
+(library
  (name flattener)
- (modes js)
  (libraries solidity-parser str cohttp-lwt-jsoo ez_file zarith_stubs_js fileutils)
- (preprocess
-  (pps js_of_ocaml-ppx))
- (promote
-  (until-clean)
-  (into ../../)
-  (only flattener.bc.js)))
+)

@@ -1,0 +1,8 @@
+(executable
+ (name oc_flattener)
+ (modes native)
+ (libraries flattener)
+ (promote
+  (until-clean)
+  (into ../../)
+  (only oc_flattener.exe)))

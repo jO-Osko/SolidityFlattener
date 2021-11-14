@@ -50,22 +50,6 @@ let make_replacer node_modules replacable_bindings =
   in
   (replacer, checker)
 
-let next_tick (_callback : 'a -> 'b) =
-  Js_of_ocaml.Js.Unsafe.(
-    fun_call
-      (js_expr "process.nextTick")
-      [| inject (Js_of_ocaml.Js.wrap_callback _callback) |])
-
-let get_remote_body url =
-  let rec run t =
-    Lwt.wakeup_paused ();
-    match Lwt.poll t with Some x -> x | None -> next_tick (fun () -> run t)
-  in
-  let url = Uri.of_string url in
-  let _response, body = Cohttp_lwt_jsoo.Client_sync.get url |> run in
-  let body_value = Cohttp_lwt.Body.to_string body |> run in
-  body_value
-
 let github_replacer =
   Str.regexp
     "\\(http\\|https\\)://github.com/\\(.*?\\)/\\(.*?\\)/\\(blob\\)/\\(.*\\)"
@@ -88,7 +72,7 @@ let url_replacers =
 
 let file_cache = ref Sm.empty
 
-let file_reader fname =
+let file_reader get_remote_body fname =
   match Sm.find_opt fname !file_cache with
   | Some x -> x
   | None ->
@@ -399,39 +383,35 @@ let usage_msg =
   "flattener <input> [--node-modules <node_modules_location>] [--contract-libs \
    <lib1>,<lib2>,<lib3>] -o <output>"
 
-let node_modules = ref "node_modules/"
+type arg_config = {
+  node_modules : string;
+  contract_libs : string list;
+  input_file : string option;
+  output_file : string option;
+  debug : bool;
+}
 
-let contract_libs = ref default_library_prefixes
+let args (get_arg_list : unit -> string Array.t) =
+  let node_modules = ref "node_modules/" in
+  let contract_libs = ref default_library_prefixes in
+  let input_file = ref None in
+  let output_file = ref None in
+  let debug = false in
 
-let input_file = ref None
-
-let output_file = ref None
-
-let debug = false
-
-let speclist =
-  [
-    ( "--node-modules",
-      Arg.Set_string node_modules,
-      "Path to node modules for additional contracts" );
-    ( "--contract-libs",
-      Arg.String
-        (fun s ->
-          contract_libs := String.split_on_char ',' s |> List.map String.trim),
-      "Additional node libraries that provide contract implementations" );
-    ("-o", Arg.String (fun s -> output_file := Some s), "Set output file name");
-  ]
-
-let args () =
-  let args =
-    try
-      Js_of_ocaml.Js.Unsafe.(variable "process.argv")
-      |> Js_of_ocaml.Js.array_map Js_of_ocaml.Js.to_string
-      |> Js_of_ocaml.Js.to_array
-    with _ ->
-      Printf.printf "Native compilation";
-      Sys.argv
+  let speclist =
+    [
+      ( "--node-modules",
+        Arg.Set_string node_modules,
+        "Path to node modules for additional contracts" );
+      ( "--contract-libs",
+        Arg.String
+          (fun s ->
+            contract_libs := String.split_on_char ',' s |> List.map String.trim),
+        "Additional node libraries that provide contract implementations" );
+      ("-o", Arg.String (fun s -> output_file := Some s), "Set output file name");
+    ]
   in
+  let arg_list = get_arg_list () in
   (* List cwd *)
   let has_node_modules dir =
     (* Printf.printf "Trying: %s\n" dir; *)
@@ -439,15 +419,20 @@ let args () =
     |> Array.exists (fun x ->
            Sys.is_directory x && String.equal "node_modules" x)
   in
+
   let parents = [ "./"; "../"; "../../"; "../../../" ] in
   (node_modules :=
      match
-       List.find_opt (fun x -> has_node_modules (Sys.getcwd () ^ x)) parents
+       List.find_opt
+         (fun x ->
+           has_node_modules
+             (Solidity_common.make_absolute_path (Sys.getcwd ()) x))
+         parents
      with
      | Some p -> p ^ "node_modules/"
      | None -> "node_modules/");
   (* Printf.printf "Found node modules: %s\n" !node_modules; *)
-  Arg.parse_argv args speclist
+  Arg.parse_argv arg_list speclist
     (fun s ->
       (* Printf.printf "Setting: %s" s; *)
       input_file := Some s)
@@ -456,17 +441,27 @@ let args () =
   node_modules :=
     Solidity_common.make_absolute_path (Sys.getcwd ()) !node_modules;
   if !node_modules.[String.length !node_modules - 1] <> Filename.dir_sep.[0]
-  then node_modules := !node_modules ^ Filename.dir_sep
+  then node_modules := !node_modules ^ Filename.dir_sep;
+  {
+    node_modules = !node_modules;
+    contract_libs = !contract_libs;
+    input_file = !input_file;
+    output_file = !output_file;
+    debug;
+  }
 
 let script_names = [ "jooskos_flattener.js"; "jooskos_flattener" ]
 
-let main =
+let main get_arg_list get_remote_body =
+  let file_reader = file_reader get_remote_body in
   let t1 = Sys.time () in
   Printexc.record_backtrace true;
-  args ();
+  let arg_config = args get_arg_list in
 
-  let replacer, _checker = make_replacer !node_modules !contract_libs in
-  match !input_file with
+  let replacer, _checker =
+    make_replacer arg_config.node_modules arg_config.contract_libs
+  in
+  match arg_config.input_file with
   | None -> failwith "No input file specified\n"
   | Some input_file ->
       if List.exists (fun x -> ends_with x input_file) script_names then
@@ -498,16 +493,16 @@ let main =
         let s =
           print_flattened
             (Solidity_common.make_absolute_path (Sys.getcwd ()) input_file)
-            sorted parsed file_reader !node_modules bad
+            sorted parsed file_reader arg_config.node_modules bad
         in
         let t5 = Sys.time () in
-        (match !output_file with
+        (match arg_config.output_file with
         | Some f ->
             let oc = open_out f in
             Printf.fprintf oc "%s" s;
             close_out oc
         | None -> Printf.printf "%s\n" s);
         let t6 = Sys.time () in
-        if debug then
+        if arg_config.debug then
           Printf.printf "%f parse:%f sort:%f pf:%f print:%f\n" (t2 -. t1)
             (t3 -. t2) (t4 -. t3) (t5 -. t4) (t6 -. t5)
