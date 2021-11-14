@@ -1,6 +1,6 @@
 {
   "name": "jooskos_flattener",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "j00sko's flattener for solidity contracts.",
   "main": "jooskos_flattener.js",
   "repository": {
